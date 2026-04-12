@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LogOut,
   Shield,
+  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import api from '../hooks/useApi';
@@ -46,58 +47,55 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="shell">
       <aside className="sidebar">
         <div className="sidebar-panel">
-          <a className="brand" href="/">
-            <span className="brand-mark">D</span>
-            <div className="brand-copy">
-              <h1>DevMind</h1>
-              <p>Aakash Singh, Founder</p>
+          <div className="sidebar-header">
+            <div className="logo">D</div>
+            <div className="brand-text">
+              <span>DevMind</span>
+              <span>v1.0</span>
             </div>
-          </a>
+          </div>
 
-          <div className="sidebar-user">
+          <div className="sidebar-user-mini">
             <div className="avatar">{initial}</div>
-            <div className="info">
-              <strong>{user?.name || 'Your workspace'}</strong>
+            <div className="user-info">
+              <strong>{user?.name || 'Workspace'}</strong>
               <span>{user?.email || 'Signed in'}</span>
             </div>
+            <ChevronRight size={14} className="chevron" />
           </div>
 
-          <div>
-            <div className="sidebar-section-label">Workspace</div>
-            <nav className="sidebar-nav">
-              {links.map((link) => (
-                <NavLink
-                  key={link.to}
-                  to={link.to}
-                  end={link.to === '/'}
-                  className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-                >
-                  {link.icon}
-                  <span>{link.label}</span>
-                </NavLink>
-              ))}
-            </nav>
-          </div>
+          <nav className="sidebar-nav">
+            {links.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                end={link.to === '/'}
+                className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+              >
+                {link.icon}
+                <span>{link.label}</span>
+              </NavLink>
+            ))}
+          </nav>
 
           <div className="sidebar-footer">
             <div className="sidebar-plan-card">
               <div className="row">
-                <span className="muted" style={{ fontSize: 12 }}>Current plan</span>
-                <span className="badge purple">{(user?.plan || 'free').toUpperCase()}</span>
+                <span className="muted">Plan</span>
+                <span className="badge">{(user?.plan || 'free').toUpperCase()}</span>
               </div>
-              <p className="muted">Upgrade anytime to raise your daily request quota.</p>
+              <p className="muted">Upgrade to unlock more requests.</p>
             </div>
 
             <button
-              className="ghost-button"
+              className="nav-link"
               onClick={() => {
                 logout();
                 navigate('/login');
               }}
-              style={{ width: '100%', justifyContent: 'flex-start' }}
             >
-              <LogOut size={16} />
-              Sign out
+              <LogOut size={18} />
+              <span>Sign out</span>
             </button>
           </div>
         </div>
