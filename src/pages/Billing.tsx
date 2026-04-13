@@ -37,6 +37,7 @@ export default function Billing() {
   const [done, setDone] = useState<string | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [currentPlan, setCurrentPlan] = useState<string>('free');
+  const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
 
   useEffect(() => {
     Promise.all([api.get('/billing/history'), api.get('/auth/me')]).then(([h, u]) => {
@@ -45,18 +46,18 @@ export default function Billing() {
     });
   }, [done]);
 
-  const pay = async (planId: string, amount: number) => {
+  const pay = async (planId: string, amountMinor: number) => {
     setLoading(planId);
     try {
-      const res = await api.post('/billing/create-order', { plan: planId });
+      const res = await api.post('/billing/create-order', { plan: planId, currency });
       const { orderId } = res.data;
 
       const options = {
         key: (import.meta as any).env?.VITE_RAZORPAY_KEY || 'rzp_test_xxxx',
-        amount,
-        currency: 'INR',
+        amount: amountMinor,
+        currency,
         name: 'DevMind AI',
-        description: `DevMind ${planId} plan`,
+        description: `DevMind ${planId} plan (${currency})`,
         order_id: orderId,
         handler: async (response: any) => {
           await api.post('/billing/verify', {
@@ -64,6 +65,7 @@ export default function Billing() {
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature,
             plan: planId,
+            currency,
           });
           setDone(planId);
           setCurrentPlan(planId);
@@ -85,6 +87,10 @@ export default function Billing() {
         <div className="topbar-copy">
           <h2>Plans & billing</h2>
           <p>Simple, transparent plans. Upgrade or downgrade at any time.</p>
+        </div>
+        <div className="split-actions">
+          <button className={currency === 'INR' ? 'primary-button' : 'secondary-button'} onClick={() => setCurrency('INR')}>INR (₹)</button>
+          <button className={currency === 'USD' ? 'primary-button' : 'secondary-button'} onClick={() => setCurrency('USD')}>USD ($)</button>
         </div>
       </div>
 
@@ -110,7 +116,7 @@ export default function Billing() {
                 {isCurrent ? <span className="badge green">Current</span> : null}
               </div>
               <div className="price-row">
-                <strong>₹{plan.price}</strong>
+                <strong>{currency === 'INR' ? `₹${plan.price}` : `$${Math.round(plan.price / 55)}`}</strong>
                 <span className="muted">/month</span>
               </div>
               <p className="muted" style={{ fontSize: 14, marginTop: -4 }}>{plan.desc}</p>
@@ -125,7 +131,7 @@ export default function Billing() {
               <button
                 className={isCurrent || !plan.popular ? 'secondary-button' : 'primary-button'}
                 disabled={Boolean(loading) || isCurrent}
-                onClick={() => pay(plan.id, plan.price * 100)}
+                onClick={() => pay(plan.id, currency === 'INR' ? plan.price * 100 : Math.round((plan.price / 55) * 100))}
               >
                 <CreditCard size={16} />
                 {buttonLabel}
@@ -159,7 +165,7 @@ export default function Billing() {
                   <td>
                     <span className="badge purple">{String(entry.plan).toUpperCase()}</span>
                   </td>
-                  <td>₹{(entry.amount / 100).toLocaleString('en-IN')}</td>
+                  <td>{entry.currency === 'USD' ? `$${(entry.amount / 100).toLocaleString('en-US')}` : `₹${(entry.amount / 100).toLocaleString('en-IN')}`}</td>
                   <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: 'var(--muted)' }}>
                     {entry.payment_id}
                   </td>

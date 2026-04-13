@@ -60,8 +60,9 @@ type UserDetail = {
 type ActivityRow = { id: string; email: string; name: string; action: string; timestamp: string; ip_address?: string };
 type IPSession = { id: string; email: string; name: string; ip_address: string; request_count: number; last_login_at?: string; last_activity?: string };
 type PaymentRow = { id: number; user_id: string; email: string; name: string; amount: number; plan: string; payment_id: string; created_at: string };
+type TeamMemoryRow = { id: number; scope: string; policy_name: string; policy_text: string; is_active: boolean };
 
-type Tab = 'users' | 'activity' | 'ips' | 'payments' | 'sessions';
+type Tab = 'users' | 'activity' | 'ips' | 'payments' | 'sessions' | 'observability' | 'memory';
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState<Tab>('users');
@@ -71,6 +72,10 @@ export default function Admin() {
   const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [ipSessions, setIPSessions] = useState<IPSession[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
+  const [obs, setObs] = useState<any>(null);
+  const [teamMemory, setTeamMemory] = useState<TeamMemoryRow[]>([]);
+  const [policyName, setPolicyName] = useState('');
+  const [policyText, setPolicyText] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [page, setPage] = useState(1);
@@ -153,6 +158,18 @@ export default function Admin() {
       setSessions(res.data.sessions || []);
     } catch {}
   };
+  const loadObservability = async () => {
+    try {
+      const res = await api.get('/admin/observability');
+      setObs(res.data);
+    } catch {}
+  };
+  const loadTeamMemory = async () => {
+    try {
+      const res = await api.get('/admin/team-memory');
+      setTeamMemory(res.data.items || []);
+    } catch {}
+  };
 
   useEffect(() => {
     loadStats().catch(() => setAuthorized(false));
@@ -173,6 +190,8 @@ export default function Admin() {
     if (activeTab === 'activity') loadActivity();
     else if (activeTab === 'ips') loadIPSessions();
     else if (activeTab === 'sessions') loadSessions();
+    else if (activeTab === 'observability') loadObservability();
+    else if (activeTab === 'memory') loadTeamMemory();
   }, [activeTab]);
 
   const refreshAll = async () => {
@@ -213,6 +232,13 @@ export default function Admin() {
   const money = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN')}`;
   const date = (value?: string | null) => (value ? new Date(value).toLocaleDateString('en-IN') : '—');
   const dateTime = (value?: string | null) => (value ? new Date(value).toLocaleString('en-IN') : '—');
+  const savePolicy = async () => {
+    if (!policyName.trim() || !policyText.trim()) return;
+    await api.post('/admin/team-memory', { scope: 'global', policyName, policyText });
+    setPolicyName('');
+    setPolicyText('');
+    await loadTeamMemory();
+  };
 
   if (!authorized) {
     return (
@@ -260,6 +286,8 @@ export default function Admin() {
           { id: 'ips', label: 'IPs', icon: <KeyRound size={14} /> },
           { id: 'payments', label: 'Payments', icon: <CreditCard size={14} /> },
           { id: 'sessions', label: 'Sessions', icon: <UserCog size={14} /> },
+          { id: 'observability', label: 'Observability', icon: <TrendingUp size={14} /> },
+          { id: 'memory', label: 'Team Memory', icon: <Sparkles size={14} /> },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -331,6 +359,50 @@ export default function Admin() {
                     <td><span className="badge slate">{row.action}</span></td>
                     <td className="muted">{row.ip_address || '-'}</td>
                     <td className="muted">{dateTime(row.timestamp)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'observability' && (
+        <section className="panel stack">
+          <div className="row"><strong>Realtime Observability (24h)</strong></div>
+          {obs?.summary ? (
+            <div className="stats-grid">
+              <div className="status-card"><div className="muted">Requests</div><strong style={{ fontSize: 28 }}>{obs.summary.total_requests}</strong></div>
+              <div className="status-card"><div className="muted">Avg Latency</div><strong style={{ fontSize: 28 }}>{obs.summary.avg_latency_ms}ms</strong></div>
+              <div className="status-card"><div className="muted">Max Latency</div><strong style={{ fontSize: 28 }}>{obs.summary.max_latency_ms}ms</strong></div>
+              <div className="status-card"><div className="muted">Failures</div><strong style={{ fontSize: 28 }}>{obs.summary.failed_requests}</strong></div>
+            </div>
+          ) : <div className="muted">No observability data.</div>}
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Action</th><th>Count</th><th>Avg ms</th></tr></thead>
+              <tbody>{(obs?.byAction || []).map((r: any) => <tr key={r.action}><td>{r.action}</td><td>{r.cnt}</td><td>{r.avg_ms}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'memory' && (
+        <section className="panel stack">
+          <div className="row"><strong>Team Memory Policies</strong></div>
+          <div className="field"><label>Policy name</label><input value={policyName} onChange={(e) => setPolicyName(e.target.value)} /></div>
+          <div className="field"><label>Policy text</label><textarea rows={4} value={policyText} onChange={(e) => setPolicyText(e.target.value)} /></div>
+          <div className="split-actions"><button className="primary-button" onClick={() => void savePolicy()}>Add policy</button></div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Scope</th><th>Active</th><th>Policy</th></tr></thead>
+              <tbody>
+                {teamMemory.map((m) => (
+                  <tr key={m.id}>
+                    <td>{m.policy_name}</td>
+                    <td>{m.scope}</td>
+                    <td>{m.is_active ? 'yes' : 'no'}</td>
+                    <td className="muted">{m.policy_text}</td>
                   </tr>
                 ))}
               </tbody>
