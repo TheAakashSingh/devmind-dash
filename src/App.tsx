@@ -6,6 +6,7 @@ import Dashboard  from './pages/Dashboard';
 import ApiKey     from './pages/ApiKey';
 import Billing    from './pages/Billing';
 import Admin      from './pages/Admin';
+import AiStudio   from './pages/AiStudio';
 
 export default function App() {
   const { token } = useAuth();
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/"        element={<Dashboard />} />
         <Route path="/api-key" element={<ApiKey />}    />
         <Route path="/billing" element={<Billing />}   />
+        <Route path="/ai-studio" element={<AiStudio />} />
         <Route path="/admin"   element={<Admin />}     />
         <Route path="*"        element={<Navigate to="/" replace />} />
       </Routes>

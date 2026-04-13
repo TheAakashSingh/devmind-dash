@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   CreditCard,
+  Brain,
   Key,
   LayoutDashboard,
   LogOut,
@@ -35,6 +36,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { to: '/', icon: <LayoutDashboard size={17} />, label: 'Overview' },
     { to: '/api-key', icon: <Key size={17} />, label: 'Extension setup' },
     { to: '/billing', icon: <CreditCard size={17} />, label: 'Plans & billing' },
+    { to: '/ai-studio', icon: <Brain size={17} />, label: 'AI studio' },
   ];
 
   if (user?.is_admin) {
