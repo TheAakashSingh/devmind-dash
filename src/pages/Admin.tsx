@@ -59,8 +59,8 @@ type UserDetail = {
 
 type ActivityRow = { id: string; email: string; name: string; action: string; timestamp: string; ip_address?: string };
 type IPSession = { id: string; email: string; name: string; ip_address: string; request_count: number; last_login_at?: string; last_activity?: string };
-type PaymentRow = { id: number; user_id: string; email: string; name: string; amount: number; plan: string; payment_id: string; created_at: string };
-type TeamMemoryRow = { id: number; scope: string; policy_name: string; policy_text: string; is_active: boolean };
+type PaymentRow = { id: number; user_id: string; email: string; name: string; amount: number; plan: string; payment_id: string; currency?: string; status?: string; created_at: string };
+type TeamMemoryRow = { id: number; scope: string; policy_name: string; policy_text: string; is_active: boolean; status?: string; priority?: number; version?: number };
 
 type Tab = 'users' | 'activity' | 'ips' | 'payments' | 'sessions' | 'observability' | 'memory';
 
@@ -76,6 +76,7 @@ export default function Admin() {
   const [teamMemory, setTeamMemory] = useState<TeamMemoryRow[]>([]);
   const [policyName, setPolicyName] = useState('');
   const [policyText, setPolicyText] = useState('');
+  const [policyPriority, setPolicyPriority] = useState(100);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [page, setPage] = useState(1);
@@ -160,8 +161,11 @@ export default function Admin() {
   };
   const loadObservability = async () => {
     try {
-      const res = await api.get('/admin/observability');
-      setObs(res.data);
+      const [base, live] = await Promise.all([
+        api.get('/admin/observability'),
+        api.get('/admin/observability/live'),
+      ]);
+      setObs({ ...base.data, live: live.data });
     } catch {}
   };
   const loadTeamMemory = async () => {
@@ -192,6 +196,12 @@ export default function Admin() {
     else if (activeTab === 'sessions') loadSessions();
     else if (activeTab === 'observability') loadObservability();
     else if (activeTab === 'memory') loadTeamMemory();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'observability') return;
+    const timer = setInterval(() => { loadObservability(); }, 8000);
+    return () => clearInterval(timer);
   }, [activeTab]);
 
   const refreshAll = async () => {
@@ -234,9 +244,14 @@ export default function Admin() {
   const dateTime = (value?: string | null) => (value ? new Date(value).toLocaleString('en-IN') : '—');
   const savePolicy = async () => {
     if (!policyName.trim() || !policyText.trim()) return;
-    await api.post('/admin/team-memory', { scope: 'global', policyName, policyText });
+    await api.post('/admin/team-memory', { scope: 'global', policyName, policyText, status: 'draft', priority: policyPriority });
     setPolicyName('');
     setPolicyText('');
+    setPolicyPriority(100);
+    await loadTeamMemory();
+  };
+  const updatePolicy = async (id: number, patch: { status?: string; isActive?: boolean; priority?: number }) => {
+    await api.patch(`/admin/team-memory/${id}`, patch);
     await loadTeamMemory();
   };
 
@@ -384,6 +399,13 @@ export default function Admin() {
               <tbody>{(obs?.byAction || []).map((r: any) => <tr key={r.action}><td>{r.action}</td><td>{r.cnt}</td><td>{r.avg_ms}</td></tr>)}</tbody>
             </table>
           </div>
+          {obs?.live?.last5m ? (
+            <div className="row" style={{ gap: 12 }}>
+              <span className="badge blue">5m req: {obs.live.last5m.requests}</span>
+              <span className="badge slate">5m avg: {obs.live.last5m.avg_ms}ms</span>
+              <span className="badge purple">fallbacks: {obs.live.fallback?.fallback_count || 0}</span>
+            </div>
+          ) : null}
         </section>
       )}
 
@@ -392,17 +414,25 @@ export default function Admin() {
           <div className="row"><strong>Team Memory Policies</strong></div>
           <div className="field"><label>Policy name</label><input value={policyName} onChange={(e) => setPolicyName(e.target.value)} /></div>
           <div className="field"><label>Policy text</label><textarea rows={4} value={policyText} onChange={(e) => setPolicyText(e.target.value)} /></div>
+          <div className="field"><label>Priority</label><input type="number" value={policyPriority} onChange={(e) => setPolicyPriority(Number(e.target.value || 100))} /></div>
           <div className="split-actions"><button className="primary-button" onClick={() => void savePolicy()}>Add policy</button></div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>Scope</th><th>Active</th><th>Policy</th></tr></thead>
+              <thead><tr><th>Name</th><th>Scope</th><th>Status</th><th>Priority</th><th>Policy</th><th>Actions</th></tr></thead>
               <tbody>
                 {teamMemory.map((m) => (
                   <tr key={m.id}>
                     <td>{m.policy_name}</td>
                     <td>{m.scope}</td>
-                    <td>{m.is_active ? 'yes' : 'no'}</td>
+                    <td>{m.status || (m.is_active ? 'approved' : 'disabled')}</td>
+                    <td>{m.priority || 100}</td>
                     <td className="muted">{m.policy_text}</td>
+                    <td>
+                      <div className="split-actions">
+                        <button className="ghost-button" onClick={() => void updatePolicy(m.id, { status: 'approved', isActive: true })}>Approve</button>
+                        <button className="ghost-button" onClick={() => void updatePolicy(m.id, { status: 'draft', isActive: false })}>Disable</button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -463,17 +493,23 @@ export default function Admin() {
       {activeTab === 'payments' && (
         <section className="panel stack">
           <div className="row"><strong>Recent Payments</strong></div>
+          <div className="row" style={{ gap: 10 }}>
+            <span className="badge blue">INR: {payments.filter((p) => (p.currency || 'INR') === 'INR').length}</span>
+            <span className="badge purple">USD: {payments.filter((p) => (p.currency || 'INR') === 'USD').length}</span>
+            <span className="badge green">Completed: {payments.filter((p) => (p.status || 'completed') === 'completed').length}</span>
+          </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>User</th><th>Plan</th><th>Amount</th><th>Date</th></tr></thead>
+              <thead><tr><th>User</th><th>Plan</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
               <tbody>
                 {payments.length === 0 ? (
-                  <tr><td colSpan={4} className="muted">No payments</td></tr>
+                  <tr><td colSpan={5} className="muted">No payments</td></tr>
                 ) : payments.map((row) => (
                   <tr key={row.id}>
                     <td>{row.name || row.email}</td>
                     <td><span className="badge blue">{row.plan}</span></td>
-                    <td>₹{((row.amount || 0) / 100).toFixed(2)}</td>
+                    <td>{(row.currency || 'INR') === 'USD' ? `$${((row.amount || 0) / 100).toFixed(2)}` : `₹${((row.amount || 0) / 100).toFixed(2)}`}</td>
+                    <td><span className="badge slate">{row.status || 'completed'}</span></td>
                     <td className="muted">{dateTime(row.created_at)}</td>
                   </tr>
                 ))}

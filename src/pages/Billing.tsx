@@ -38,6 +38,7 @@ export default function Billing() {
   const [history, setHistory] = useState<any[]>([]);
   const [currentPlan, setCurrentPlan] = useState<string>('free');
   const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
+  const [error, setError] = useState<string>('');
 
   useEffect(() => {
     Promise.all([api.get('/billing/history'), api.get('/auth/me')]).then(([h, u]) => {
@@ -48,6 +49,7 @@ export default function Billing() {
 
   const pay = async (planId: string, amountMinor: number) => {
     setLoading(planId);
+    setError('');
     try {
       const res = await api.post('/billing/create-order', { plan: planId, currency });
       const { orderId } = res.data;
@@ -75,7 +77,7 @@ export default function Billing() {
       const razorpay = new (window as any).Razorpay(options);
       razorpay.open();
     } catch {
-      window.alert('Payment failed. Please try again.');
+      setError('Payment failed or was cancelled. Please retry.');
     } finally {
       setLoading(null);
     }
@@ -99,6 +101,7 @@ export default function Billing() {
           <strong>{done.toUpperCase()}</strong> plan activated successfully.
         </div>
       ) : null}
+      {error ? <div className="empty-state"><span className="muted">{error}</span></div> : null}
 
       <div className="pricing-grid">
         {PLANS.map((plan) => {
