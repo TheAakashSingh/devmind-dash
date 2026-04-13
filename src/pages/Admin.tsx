@@ -57,10 +57,20 @@ type UserDetail = {
   }>;
 };
 
+type ActivityRow = { id: string; email: string; name: string; action: string; timestamp: string; ip_address?: string };
+type IPSession = { id: string; email: string; name: string; ip_address: string; request_count: number; last_login_at?: string; last_activity?: string };
+type PaymentRow = { id: number; user_id: string; email: string; name: string; amount: number; plan: string; payment_id: string; created_at: string };
+
+type Tab = 'users' | 'activity' | 'ips' | 'payments' | 'sessions';
+
 export default function Admin() {
+  const [activeTab, setActiveTab] = useState<Tab>('users');
   const [stats, setStats] = useState<any>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [activity, setActivity] = useState<ActivityRow[]>([]);
+  const [ipSessions, setIPSessions] = useState<IPSession[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [page, setPage] = useState(1);
@@ -123,6 +133,27 @@ export default function Admin() {
     }
   };
 
+  const loadActivity = async () => {
+    try {
+      const res = await api.get('/admin/activity?limit=50');
+      setActivity(res.data.activity || []);
+    } catch {}
+  };
+
+  const loadIPSessions = async () => {
+    try {
+      const res = await api.get('/admin/ips');
+      setIPSessions(res.data.ips || []);
+    } catch {}
+  };
+
+  const loadSessions = async () => {
+    try {
+      const res = await api.get('/admin/sessions');
+      setSessions(res.data.sessions || []);
+    } catch {}
+  };
+
   useEffect(() => {
     loadStats().catch(() => setAuthorized(false));
     loadPayments().catch(() => setAuthorized(false));
@@ -130,7 +161,6 @@ export default function Admin() {
 
   useEffect(() => {
     loadUsers().catch(() => setAuthorized(false));
-    // reset pagination when filters change
   }, [page, search, planFilter]);
 
   useEffect(() => {
@@ -138,6 +168,12 @@ export default function Admin() {
       loadUserDetail(selectedUserId).catch(() => setAuthorized(false));
     }
   }, [selectedUserId]);
+
+  useEffect(() => {
+    if (activeTab === 'activity') loadActivity();
+    else if (activeTab === 'ips') loadIPSessions();
+    else if (activeTab === 'sessions') loadSessions();
+  }, [activeTab]);
 
   const refreshAll = async () => {
     await Promise.all([loadStats(), loadPayments(), loadUsers()]);
@@ -217,6 +253,24 @@ export default function Admin() {
         </div>
       </div>
 
+      <div className="tabs" style={{ marginBottom: 20 }}>
+        {[
+          { id: 'users', label: 'Users', icon: <Users size={14} /> },
+          { id: 'activity', label: 'Activity', icon: <Zap size={14} /> },
+          { id: 'ips', label: 'IPs', icon: <KeyRound size={14} /> },
+          { id: 'payments', label: 'Payments', icon: <CreditCard size={14} /> },
+          { id: 'sessions', label: 'Sessions', icon: <UserCog size={14} /> },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            className={`tab ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.id as Tab)}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
+      </div>
+
       {stats ? (
         <div className="stats-grid">
           {[
@@ -261,6 +315,104 @@ export default function Admin() {
         </section>
       ) : null}
 
+      {/* Activity Tab */}
+      {activeTab === 'activity' && (
+        <section className="panel stack">
+          <div className="row"><strong>Recent Activity</strong></div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>User</th><th>Action</th><th>IP</th><th>Time</th></tr></thead>
+              <tbody>
+                {activity.length === 0 ? (
+                  <tr><td colSpan={4} className="muted">No activity yet</td></tr>
+                ) : activity.map((row) => (
+                  <tr key={row.id + row.timestamp}>
+                    <td>{row.name || row.email}</td>
+                    <td><span className="badge slate">{row.action}</span></td>
+                    <td className="muted">{row.ip_address || '-'}</td>
+                    <td className="muted">{dateTime(row.timestamp)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* IPs Tab */}
+      {activeTab === 'ips' && (
+        <section className="panel stack">
+          <div className="row"><strong>IP Addresses</strong></div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>User</th><th>IP Address</th><th>Last Login</th><th>Requests</th></tr></thead>
+              <tbody>
+                {ipSessions.length === 0 ? (
+                  <tr><td colSpan={4} className="muted">No IPs recorded</td></tr>
+                ) : ipSessions.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.name || row.email}</td>
+                    <td><code style={{ fontSize: 12 }}>{row.ip_address || '-'}</code></td>
+                    <td className="muted">{dateTime(row.last_login_at)}</td>
+                    <td>{row.request_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Sessions Tab */}
+      {activeTab === 'sessions' && (
+        <section className="panel stack">
+          <div className="row"><strong>Active Sessions</strong></div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>User</th><th>IP</th><th>Last Activity</th><th>Requests</th></tr></thead>
+              <tbody>
+                {sessions.length === 0 ? (
+                  <tr><td colSpan={4} className="muted">No sessions</td></tr>
+                ) : sessions.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.name || row.email}</td>
+                    <td><code style={{ fontSize: 12 }}>{row.ip_address || '-'}</code></td>
+                    <td className="muted">{dateTime(row.last_activity)}</td>
+                    <td>{row.total_requests}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Payments Tab */}
+      {activeTab === 'payments' && (
+        <section className="panel stack">
+          <div className="row"><strong>Recent Payments</strong></div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>User</th><th>Plan</th><th>Amount</th><th>Date</th></tr></thead>
+              <tbody>
+                {payments.length === 0 ? (
+                  <tr><td colSpan={4} className="muted">No payments</td></tr>
+                ) : payments.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.name || row.email}</td>
+                    <td><span className="badge blue">{row.plan}</span></td>
+                    <td>₹{((row.amount || 0) / 100).toFixed(2)}</td>
+                    <td className="muted">{dateTime(row.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Users Tab */}
+      {activeTab === 'users' && (<>
       <div className="admin-toolbar">
         <div className="field">
           <label htmlFor="search">Search users</label>
@@ -554,7 +706,7 @@ export default function Admin() {
                   <td>{money(payment.amount)}</td>
                   <td>{payment.payment_id || '—'}</td>
                   <td>
-                    <span className="badge green">{payment.status}</span>
+                    <span className="badge green">{}</span>
                   </td>
                   <td>{dateTime(payment.created_at)}</td>
                 </tr>
@@ -569,6 +721,7 @@ export default function Admin() {
           </table>
         </div>
       </section>
+      </>)}
     </>
   );
 }
