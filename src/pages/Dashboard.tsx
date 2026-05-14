@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   ArrowRight,
   BarChart3,
   Calendar,
+  Clock,
   KeyRound,
   Mail,
   Rocket,
@@ -16,13 +18,15 @@ const PLAN_LIMITS: Record<string, number> = { free: 20, solo: 100, pro: 500, tea
 export default function Dashboard() {
   const [info, setInfo] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const [activity, setActivity] = useState<{ recent: any[]; byAction: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.get('/auth/validate'), api.get('/auth/me')])
-      .then(([validateRes, userRes]) => {
+    Promise.all([api.get('/auth/validate'), api.get('/auth/me'), api.get('/auth/activity')])
+      .then(([validateRes, userRes, actRes]) => {
         setInfo(validateRes.data);
         setUser(userRes.data);
+        setActivity(actRes.data || null);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -155,6 +159,76 @@ export default function Dashboard() {
       <div className="detail-grid">
         <section className="panel stack">
           <div className="row">
+            <strong style={{ fontSize: 15 }}>Recent extension usage</strong>
+            <span className="badge slate">
+              <Activity size={13} />
+              Latest
+            </span>
+          </div>
+          {activity?.recent?.length ? (
+            <div className="table-wrap" style={{ marginTop: 4 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Action</th>
+                    <th>Model</th>
+                    <th>Status</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.recent.slice(0, 12).map((row: any) => (
+                    <tr key={row.id}>
+                      <td>
+                        <span className="badge purple">{row.action}</span>
+                      </td>
+                      <td className="muted" style={{ fontSize: 13 }}>
+                        {row.model || '—'}
+                      </td>
+                      <td>
+                        <span className={`badge ${row.status === 'error' ? 'pink' : 'green'}`}>{row.status || 'ok'}</span>
+                      </td>
+                      <td className="muted" style={{ fontSize: 13 }}>
+                        <Clock size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                        {new Date(row.created_at).toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="muted" style={{ fontSize: 14, margin: 0 }}>
+              No requests logged yet. Use the VS Code extension, then refresh this page.
+            </p>
+          )}
+        </section>
+
+        <section className="panel stack">
+          <div className="row">
+            <strong style={{ fontSize: 15 }}>Last 7 days by action</strong>
+            <span className="badge blue">Totals</span>
+          </div>
+          {activity?.byAction?.length ? (
+            <ul className="stack" style={{ gap: 8, listStyle: 'none', padding: 0, margin: 0 }}>
+              {activity.byAction.map((row: any) => (
+                <li key={row.action} className="row" style={{ justifyContent: 'space-between' }}>
+                  <span className="badge slate">{row.action}</span>
+                  <span style={{ fontWeight: 600 }}>{row.cnt}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted" style={{ fontSize: 14, margin: 0 }}>
+              A per-action breakdown appears after you use different extension features.
+            </p>
+          )}
+        </section>
+      </div>
+
+      <div className="detail-grid">
+        <section className="panel stack">
+          <div className="row">
             <strong style={{ fontSize: 15 }}>Get started in VS Code</strong>
             <span className="badge purple">4 steps</span>
           </div>
@@ -202,6 +276,22 @@ export default function Dashboard() {
                 {user?.created_at ? new Date(user.created_at).toLocaleDateString('en-IN') : '—'}
               </span>
             </div>
+            <div className="row">
+              <span className="muted" style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Clock size={14} /> Last sign-in
+              </span>
+              <span style={{ fontSize: 14 }}>
+                {user?.last_login_at ? new Date(user.last_login_at).toLocaleString('en-IN') : '—'}
+              </span>
+            </div>
+            {user?.ip_address ? (
+              <div className="row">
+                <span className="muted" style={{ fontSize: 13 }}>
+                  Last IP (from dashboard login)
+                </span>
+                <code style={{ fontSize: 13 }}>{user.ip_address}</code>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

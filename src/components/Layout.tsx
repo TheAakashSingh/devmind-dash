@@ -19,17 +19,36 @@ type UserSummary = {
   plan?: string;
 };
 
+type QuotaHint = { used?: number; remaining?: number; limit?: number };
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [user, setUser] = useState<UserSummary | null>(null);
+  const [quota, setQuota] = useState<QuotaHint | null>(null);
 
   useEffect(() => {
-    api
-      .get('/auth/me')
-      .then((res) => setUser(res.data))
-      .catch(() => setUser(null));
+    Promise.all([api.get('/auth/me'), api.get('/auth/validate').catch(() => null)])
+      .then(([meRes, valRes]) => {
+        setUser(meRes.data);
+        if (valRes?.data?.valid) {
+          const plan = (meRes.data?.plan || valRes.data.plan || 'free') as string;
+          const limits: Record<string, number> = { free: 20, solo: 100, pro: 500, team: 2000 };
+          const limit = limits[plan] ?? limits.free;
+          setQuota({
+            used: valRes.data.used,
+            remaining: valRes.data.remaining,
+            limit,
+          });
+        } else {
+          setQuota(null);
+        }
+      })
+      .catch(() => {
+        setUser(null);
+        setQuota(null);
+      });
   }, [location.pathname]);
 
   const links = [
@@ -86,7 +105,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <span className="muted">Plan</span>
                 <span className="badge">{(user?.plan || 'free').toUpperCase()}</span>
               </div>
-              <p className="muted">Upgrade to unlock more requests.</p>
+              {quota && typeof quota.used === 'number' && typeof quota.limit === 'number' ? (
+                <p className="muted" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.4 }}>
+                  Today: <strong style={{ color: 'var(--text)' }}>{quota.used}</strong> / {quota.limit} requests
+                  <br />
+                  <span>{quota.remaining} left before reset</span>
+                </p>
+              ) : (
+                <p className="muted">Upgrade to unlock more requests.</p>
+              )}
             </div>
 
             <button

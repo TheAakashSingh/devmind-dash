@@ -6,7 +6,8 @@ const PLANS = [
   {
     id: 'solo',
     name: 'Solo',
-    price: 499,
+    priceInr: 199,
+    priceUsd: 3.99,
     limit: 100,
     popular: false,
     desc: 'For individual developers.',
@@ -15,7 +16,8 @@ const PLANS = [
   {
     id: 'pro',
     name: 'Pro',
-    price: 999,
+    priceInr: 449,
+    priceUsd: 8.99,
     limit: 500,
     popular: true,
     desc: 'For heavy daily users.',
@@ -24,7 +26,8 @@ const PLANS = [
   {
     id: 'team',
     name: 'Team',
-    price: 799,
+    priceInr: 349,
+    priceUsd: 6.99,
     limit: 2000,
     popular: false,
     desc: 'For teams with shared admin.',
@@ -47,16 +50,16 @@ export default function Billing() {
     });
   }, [done]);
 
-  const pay = async (planId: string, amountMinor: number) => {
+  const pay = async (planId: string) => {
     setLoading(planId);
     setError('');
     try {
       const res = await api.post('/billing/create-order', { plan: planId, currency });
-      const { orderId } = res.data;
+      const { orderId, amount } = res.data as { orderId: string; amount: number; currency: string };
 
       const options = {
         key: (import.meta as any).env?.VITE_RAZORPAY_KEY || 'rzp_test_xxxx',
-        amount: amountMinor,
+        amount,
         currency,
         name: 'DevMind AI',
         description: `DevMind ${planId} plan (${currency})`,
@@ -88,7 +91,7 @@ export default function Billing() {
       <div className="topbar">
         <div className="topbar-copy">
           <h2>Plans & billing</h2>
-          <p>Simple, transparent plans. Upgrade or downgrade at any time.</p>
+          <p>Lower monthly pricing. Amount charged always matches the live order from our server.</p>
         </div>
         <div className="split-actions">
           <button className={currency === 'INR' ? 'primary-button' : 'secondary-button'} onClick={() => setCurrency('INR')}>INR (₹)</button>
@@ -119,7 +122,7 @@ export default function Billing() {
                 {isCurrent ? <span className="badge green">Current</span> : null}
               </div>
               <div className="price-row">
-                <strong>{currency === 'INR' ? `₹${plan.price}` : `$${Math.round(plan.price / 55)}`}</strong>
+                <strong>{currency === 'INR' ? `₹${plan.priceInr}` : `$${plan.priceUsd.toFixed(2)}`}</strong>
                 <span className="muted">/month</span>
               </div>
               <p className="muted" style={{ fontSize: 14, marginTop: -4 }}>{plan.desc}</p>
@@ -134,7 +137,7 @@ export default function Billing() {
               <button
                 className={isCurrent || !plan.popular ? 'secondary-button' : 'primary-button'}
                 disabled={Boolean(loading) || isCurrent}
-                onClick={() => pay(plan.id, currency === 'INR' ? plan.price * 100 : Math.round((plan.price / 55) * 100))}
+                onClick={() => pay(plan.id)}
               >
                 <CreditCard size={16} />
                 {buttonLabel}

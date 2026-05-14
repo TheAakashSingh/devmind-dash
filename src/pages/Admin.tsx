@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowRight,
-  CalendarDays,
   CreditCard,
+  DollarSign,
   IndianRupee,
   KeyRound,
   RefreshCw,
@@ -22,16 +21,17 @@ type UserRow = {
   name: string;
   plan: string;
   is_admin: boolean;
+  banned?: boolean;
   email_verified_at?: string | null;
   created_at: string;
   updated_at?: string;
-  total_paid_paise?: number;
-  last_payment_at?: string | null;
+  total_paid_inr?: number | string;
+  total_paid_usd?: number | string;
   requests_24h?: number;
 };
 
 type UserDetail = {
-  user: UserRow & { api_key: string };
+  user: UserRow & { api_key: string; ip_address?: string | null; last_login_at?: string | null };
   summary: {
     totalRequests: number;
     tokensIn: number;
@@ -42,6 +42,7 @@ type UserDetail = {
     id: number;
     plan: string;
     amount: number;
+    currency?: string;
     payment_id: string;
     order_id: string;
     status: string;
@@ -53,6 +54,8 @@ type UserDetail = {
     model: string | null;
     tokens_in: number;
     tokens_out: number;
+    status?: string;
+    request_ms?: number;
     created_at: string;
   }>;
 };
@@ -62,7 +65,7 @@ type IPSession = { id: string; email: string; name: string; ip_address: string; 
 type PaymentRow = { id: number; user_id: string; email: string; name: string; amount: number; plan: string; payment_id: string; currency?: string; status?: string; created_at: string };
 type TeamMemoryRow = { id: number; scope: string; policy_name: string; policy_text: string; is_active: boolean; status?: string; priority?: number; version?: number };
 
-type Tab = 'users' | 'activity' | 'ips' | 'payments' | 'sessions' | 'observability' | 'memory';
+type Tab = 'users' | 'activity' | 'ips' | 'payments' | 'sessions' | 'observability' | 'memory' | 'revenue';
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState<Tab>('users');
@@ -74,6 +77,8 @@ export default function Admin() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [obs, setObs] = useState<any>(null);
   const [teamMemory, setTeamMemory] = useState<TeamMemoryRow[]>([]);
+  const [revenue, setRevenue] = useState<any>(null);
+  const [activityUserFilter, setActivityUserFilter] = useState('');
   const [policyName, setPolicyName] = useState('');
   const [policyText, setPolicyText] = useState('');
   const [policyPriority, setPolicyPriority] = useState(100);
@@ -99,7 +104,7 @@ export default function Admin() {
   };
 
   const loadPayments = async () => {
-    const res = await api.get('/admin/payments?limit=12');
+    const res = await api.get('/admin/payments?limit=80');
     setPayments(res.data.payments || []);
   };
 
@@ -141,8 +146,20 @@ export default function Admin() {
 
   const loadActivity = async () => {
     try {
-      const res = await api.get('/admin/activity?limit=50');
+      const res = await api.get('/admin/activity', {
+        params: {
+          limit: 100,
+          ...(activityUserFilter.trim() ? { userId: activityUserFilter.trim() } : {}),
+        },
+      });
       setActivity(res.data.activity || []);
+    } catch {}
+  };
+
+  const loadRevenue = async () => {
+    try {
+      const res = await api.get('/admin/revenue');
+      setRevenue(res.data);
     } catch {}
   };
 
@@ -196,7 +213,8 @@ export default function Admin() {
     else if (activeTab === 'sessions') loadSessions();
     else if (activeTab === 'observability') loadObservability();
     else if (activeTab === 'memory') loadTeamMemory();
-  }, [activeTab]);
+    else if (activeTab === 'revenue') loadRevenue();
+  }, [activeTab, activityUserFilter]);
 
   useEffect(() => {
     if (activeTab !== 'observability') return;
@@ -239,7 +257,33 @@ export default function Admin() {
     }
   };
 
+  const toggleBan = async (userId: string, banned: boolean) => {
+    setSavingUserId(userId);
+    try {
+      await api.patch(`/admin/users/${userId}/ban`, { banned });
+      setUsers((current) => current.map((user) => (user.id === userId ? { ...user, banned } : user)));
+      if (selectedUser?.user.id === userId) {
+        setSelectedUser((current) =>
+          current ? { ...current, user: { ...current.user, banned } } : current
+        );
+      }
+      await loadStats();
+    } finally {
+      setSavingUserId('');
+    }
+  };
+
   const money = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN')}`;
+  const formatMinor = (amount: number, currency?: string) =>
+    (currency || 'INR') === 'USD' ? `$${(amount / 100).toFixed(2)}` : money(amount);
+  const paidCell = (u: UserRow) => {
+    const inr = Number(u.total_paid_inr || 0);
+    const usd = Number(u.total_paid_usd || 0);
+    const bits: string[] = [];
+    bits.push(inr ? money(inr) : '₹0');
+    if (usd) bits.push(`$${(usd / 100).toFixed(2)}`);
+    return bits.join(' · ');
+  };
   const date = (value?: string | null) => (value ? new Date(value).toLocaleDateString('en-IN') : '—');
   const dateTime = (value?: string | null) => (value ? new Date(value).toLocaleString('en-IN') : '—');
   const savePolicy = async () => {
@@ -302,6 +346,7 @@ export default function Admin() {
           { id: 'payments', label: 'Payments', icon: <CreditCard size={14} /> },
           { id: 'sessions', label: 'Sessions', icon: <UserCog size={14} /> },
           { id: 'observability', label: 'Observability', icon: <TrendingUp size={14} /> },
+          { id: 'revenue', label: 'Revenue', icon: <DollarSign size={14} /> },
           { id: 'memory', label: 'Team Memory', icon: <Sparkles size={14} /> },
         ].map((tab) => (
           <button
@@ -317,15 +362,26 @@ export default function Admin() {
       {stats ? (
         <div className="stats-grid">
           {[
-            { label: 'Total users', value: stats.totalUsers, foot: 'All registered accounts.', icon: <Users size={16} /> },
+            {
+              label: 'Total users',
+              value: stats.totalUsers,
+              foot: `${stats.bannedUsers || 0} banned · all registered accounts.`,
+              icon: <Users size={16} />,
+            },
             { label: 'Paid users', value: stats.paidUsers, foot: 'Active non-free plans.', icon: <TrendingUp size={16} /> },
             {
-              label: 'Revenue',
-              value: money(stats.revenueInPaise),
-              foot: 'Lifetime recorded payments.',
+              label: 'Revenue (INR)',
+              value: money(stats.revenueInPaise || 0),
+              foot: 'Lifetime INR payments.',
               icon: <IndianRupee size={16} />,
             },
-            { label: 'Requests today', value: stats.todayRequests, foot: 'Current 24-hour activity.', icon: <Zap size={16} /> },
+            {
+              label: 'Revenue (USD)',
+              value: `$${((stats.revenueUSDCents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              foot: 'Lifetime USD payments.',
+              icon: <DollarSign size={16} />,
+            },
+            { label: 'Requests today', value: stats.todayRequests, foot: 'Rolling 24h usage_logs.', icon: <Zap size={16} /> },
           ].map((item) => (
             <article key={item.label} className="metric-card">
               <div className="metric-head">
@@ -358,10 +414,51 @@ export default function Admin() {
         </section>
       ) : null}
 
+      {stats?.featureUsage?.length ? (
+        <section className="panel stack">
+          <div className="row">
+            <strong style={{ fontSize: 15 }}>Top extension actions (7 days)</strong>
+            <span className="muted" style={{ fontSize: 13 }}>Across all users</span>
+          </div>
+          <div className="stats-grid">
+            {stats.featureUsage.map((entry: any) => (
+              <div key={entry.action} className="status-card">
+                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                  {entry.action}
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>{entry.cnt}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {/* Activity Tab */}
       {activeTab === 'activity' && (
         <section className="panel stack">
-          <div className="row"><strong>Recent Activity</strong></div>
+          <div className="row" style={{ flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
+            <strong style={{ marginRight: 'auto' }}>Recent Activity</strong>
+            <div className="field" style={{ minWidth: 240, margin: 0 }}>
+              <label htmlFor="actUser">User id</label>
+              <input
+                id="actUser"
+                placeholder="Paste user UUID to narrow"
+                value={activityUserFilter}
+                onChange={(e) => setActivityUserFilter(e.target.value)}
+              />
+            </div>
+            <button className="primary-button" type="button" onClick={() => void loadActivity()}>
+              Apply
+            </button>
+            <button type="button" className="ghost-button" onClick={() => setActivityUserFilter('')}>
+              Clear
+            </button>
+          </div>
+          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+            {activityUserFilter.trim()
+              ? 'Showing usage for the selected user id only.'
+              : 'Showing the latest events across all accounts.'}
+          </p>
           <div className="table-wrap">
             <table>
               <thead><tr><th>User</th><th>Action</th><th>IP</th><th>Time</th></tr></thead>
@@ -406,6 +503,100 @@ export default function Admin() {
               <span className="badge purple">fallbacks: {obs.live.fallback?.fallback_count || 0}</span>
             </div>
           ) : null}
+          {obs?.errors?.length ? (
+            <div className="table-wrap" style={{ marginTop: 16 }}>
+              <div className="table-head">
+                <strong>Recent error events</strong>
+                <span className="muted" style={{ fontSize: 13 }}>Last {obs.errors.length} from usage_logs</span>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Action</th>
+                    <th>Message</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {obs.errors.map((err: any, i: number) => (
+                    <tr key={`${err.created_at}-${i}`}>
+                      <td><span className="badge pink">{err.action}</span></td>
+                      <td className="muted" style={{ fontSize: 13, maxWidth: 420, wordBreak: 'break-word' }}>
+                        {err.error_message || '—'}
+                      </td>
+                      <td className="muted">{dateTime(err.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+      )}
+
+      {activeTab === 'revenue' && (
+        <section className="panel stack">
+          <div className="row">
+            <strong>Revenue analytics</strong>
+            <button type="button" className="secondary-button" onClick={() => void loadRevenue()}>
+              <RefreshCw size={14} />
+              Refresh
+            </button>
+          </div>
+          {!revenue ? (
+            <div className="muted">Loading…</div>
+          ) : (
+            <>
+              <div className="table-wrap">
+                <div className="table-head"><strong>By plan & currency</strong></div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Plan</th>
+                      <th>Currency</th>
+                      <th>Count</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(revenue.byPlan || []).length ? (
+                      revenue.byPlan.map((r: any, i: number) => (
+                        <tr key={`${r.plan}-${r.currency}-${i}`}>
+                          <td>{String(r.plan).toUpperCase()}</td>
+                          <td>{r.currency}</td>
+                          <td>{r.cnt}</td>
+                          <td>{r.currency === 'USD' ? `$${(Number(r.total) / 100).toFixed(2)}` : money(Number(r.total))}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={4} className="muted">No payment rows yet.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="table-wrap">
+                <div className="table-head"><strong>Daily totals (30 days)</strong></div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Day</th>
+                      <th>Currency</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(revenue.daily || []).map((r: any, i: number) => (
+                      <tr key={`${r.day}-${r.currency}-${i}`}>
+                        <td>{String(r.day)}</td>
+                        <td>{r.currency}</td>
+                        <td>{r.currency === 'USD' ? `$${(Number(r.total) / 100).toFixed(2)}` : money(Number(r.total))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </section>
       )}
 
@@ -598,11 +789,16 @@ export default function Admin() {
                         </div>
                       </td>
                       <td>
-                        <span className={`badge ${user.plan === 'free' ? 'slate' : 'purple'}`}>
-                          {String(user.plan).toUpperCase()}
-                        </span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                          <span className={`badge ${user.plan === 'free' ? 'slate' : 'purple'}`}>
+                            {String(user.plan).toUpperCase()}
+                          </span>
+                          {user.banned ? (
+                            <span className="badge pink">Banned</span>
+                          ) : null}
+                        </div>
                       </td>
-                      <td>{money(user.total_paid_paise || 0)}</td>
+                      <td className="muted" style={{ fontSize: 13 }}>{paidCell(user)}</td>
                       <td>{user.requests_24h || 0}</td>
                       <td className="muted">{date(user.created_at)}</td>
                     </tr>
@@ -664,9 +860,16 @@ export default function Admin() {
 
                 <div className="meta" style={{ marginTop: 12 }}>
                   <span className="badge blue">{selectedUser.user.plan.toUpperCase()}</span>
-                  <span className="badge slate">{dateTime(selectedUser.user.email_verified_at)}</span>
+                  {selectedUser.user.banned ? <span className="badge pink">Banned</span> : null}
+                  <span className="badge slate">Verified {dateTime(selectedUser.user.email_verified_at)}</span>
                   <span className="badge slate">Joined {date(selectedUser.user.created_at)}</span>
+                  <span className="badge slate">Login {dateTime(selectedUser.user.last_login_at)}</span>
                 </div>
+                {selectedUser.user.ip_address ? (
+                  <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                    Last IP: <code>{selectedUser.user.ip_address}</code>
+                  </div>
+                ) : null}
               </div>
 
               <div className="admin-detail-grid">
@@ -712,6 +915,34 @@ export default function Admin() {
                   >
                     {selectedUser.user.is_admin ? 'Remove admin' : 'Make admin'}
                   </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={savingUserId === selectedUser.user.id}
+                    onClick={() => {
+                      setActivityUserFilter(selectedUser.user.id);
+                      setActiveTab('activity');
+                    }}
+                  >
+                    Activity log
+                  </button>
+                </div>
+              </div>
+
+              <div className="admin-muted-box">
+                <div className="row">
+                  <strong style={{ fontSize: 14 }}>Access control</strong>
+                  <span className="muted" style={{ fontSize: 12 }}>Ban blocks new extension usage</span>
+                </div>
+                <div className="split-actions" style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className={selectedUser.user.banned ? 'primary-button' : 'secondary-button'}
+                    disabled={savingUserId === selectedUser.user.id}
+                    onClick={() => toggleBan(selectedUser.user.id, !selectedUser.user.banned)}
+                  >
+                    {selectedUser.user.banned ? 'Unban account' : 'Ban account'}
+                  </button>
                 </div>
               </div>
 
@@ -739,7 +970,7 @@ export default function Admin() {
                     <div key={payment.id} className="admin-user-card">
                       <div className="row">
                         <strong>{payment.plan.toUpperCase()}</strong>
-                        <span className="badge blue">{money(payment.amount)}</span>
+                        <span className="badge blue">{formatMinor(payment.amount, payment.currency)}</span>
                       </div>
                       <div className="muted" style={{ fontSize: 12 }}>
                         {payment.status} • {dateTime(payment.created_at)}
@@ -767,7 +998,9 @@ export default function Admin() {
                         <span className="badge slate">{dateTime(entry.created_at)}</span>
                       </div>
                       <div className="muted" style={{ fontSize: 12 }}>
-                        Model: {entry.model || 'n/a'} • In: {entry.tokens_in} • Out: {entry.tokens_out}
+                        Model: {entry.model || 'n/a'} • In: {entry.tokens_in} • Out: {entry.tokens_out} •{' '}
+                        {entry.request_ms != null ? `${entry.request_ms} ms` : '—'} •{' '}
+                        <span className={entry.status === 'error' ? 'badge pink' : 'badge slate'}>{entry.status || 'ok'}</span>
                       </div>
                     </div>
                   )) : (
@@ -811,10 +1044,16 @@ export default function Admin() {
                 <tr key={payment.id}>
                   <td>{payment.name || payment.email}</td>
                   <td>{String(payment.plan).toUpperCase()}</td>
-                  <td>{money(payment.amount)}</td>
+                  <td>{formatMinor(payment.amount, payment.currency)}</td>
                   <td>{payment.payment_id || '—'}</td>
                   <td>
-                    <span className="badge green">{}</span>
+                    <span
+                      className={`badge ${
+                        (payment.status || 'completed') === 'completed' ? 'green' : 'slate'
+                      }`}
+                    >
+                      {payment.status || 'completed'}
+                    </span>
                   </td>
                   <td>{dateTime(payment.created_at)}</td>
                 </tr>
