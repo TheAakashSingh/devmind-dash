@@ -1089,6 +1089,151 @@ td select {
   font-size: 14px;
 }
 
+/* ── Admin console (multi-page shell) ── */
+.page-inner.admin-console-root {
+  max-width: 1480px;
+}
+.admin-console {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--panel);
+  min-height: min(720px, calc(100vh - 140px));
+}
+.admin-console-sidebar {
+  border-right: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.55), rgba(15, 23, 42, 0.25));
+  padding: 20px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.admin-console-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.admin-console-brand strong {
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+.admin-console-sub {
+  font-size: 12px;
+}
+.admin-console-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.admin-console-nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.admin-console-nav-heading {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 10px;
+}
+.admin-console-link {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 10px;
+  border-radius: 12px;
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.admin-console-link:hover {
+  background: rgba(56, 189, 248, 0.06);
+  border-color: rgba(56, 189, 248, 0.12);
+}
+.admin-console-link.active {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.22);
+}
+.admin-console-link-icon {
+  margin-top: 2px;
+  color: #7dd3fc;
+  flex-shrink: 0;
+}
+.admin-console-link-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.admin-console-link-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+.admin-console-link-desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.admin-console-sidebar-foot {
+  padding: 10px 8px 0;
+  border-top: 1px solid var(--line);
+}
+.admin-console-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: rgba(8, 12, 20, 0.35);
+}
+.admin-console-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 22px 24px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.admin-console-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.admin-console-toolbar-copy {
+  margin: 6px 0 0;
+  font-size: 14px;
+  max-width: 520px;
+}
+.admin-console-outlet {
+  padding: 20px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+  min-height: 0;
+}
+.admin-page-head h3 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.admin-page-head p {
+  margin: 0;
+  font-size: 14px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 1100px) {
   .shell { grid-template-columns: 1fr; }
@@ -1116,6 +1261,13 @@ td select {
   }
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-grid, .hero-grid, .auth-layout, .admin-split { grid-template-columns: 1fr; }
+  .admin-console {
+    grid-template-columns: 1fr;
+  }
+  .admin-console-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
   .auth-showcase { padding: 48px 32px 44px; }
   .pricing-grid { grid-template-columns: 1fr; }
 }
@@ -1136,5 +1288,21 @@ td select {
   }
   .admin-detail-grid {
     grid-template-columns: 1fr;
+  }
+  .admin-console {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .admin-console-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .admin-console-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    overflow-x: auto;
+  }
+  .admin-console-nav-section {
+    min-width: 200px;
   }
 }

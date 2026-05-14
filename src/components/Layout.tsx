@@ -59,7 +59,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   if (user?.is_admin) {
-    links.push({ to: '/admin', icon: <Shield size={17} />, label: 'Admin console' });
+    links.push({ to: '/admin/overview', icon: <Shield size={17} />, label: 'Admin console' });
   }
 
   const initial = (user?.name || user?.email || 'D')[0].toUpperCase();
